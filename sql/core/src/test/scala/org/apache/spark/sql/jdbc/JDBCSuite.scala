@@ -128,6 +128,24 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
+
+    // Null columns
+    conn.prepareStatement("create table test.nullables (id INT NOT NULL, " +
+      "a BOOLEAN DEFAULT NULL, b DATE DEFAULT NULL, c DECIMAL(40, 20) DEFAULT NULL, " +
+      "d DOUBLE DEFAULT NULL, e FLOAT DEFAULT NULL, f INT DEFAULT NULL, g BIGINT DEFAULT NULL," +
+      "h BINARY(20) DEFAULT NULL, i VARCHAR(20) DEFAULT NULL, j TIME DEFAULT NULL, " +
+      "k TIMESTAMP DEFAULT NULL)"
+    ).executeUpdate()
+    conn.prepareStatement("insert into test.nullables (id) " +
+      "values (1)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nullables
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.NULLABLES', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
   }
 
   after {
@@ -273,6 +291,14 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(rows(0).getAs[BigDecimal](2)
         .equals(new BigDecimal("123456789012345.54321543215432100000")))
     assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
+  }
+
+  test("H2 null columns") {
+    val rows = sql("SELECT * FROM nullables WHERE ID = 1").collect()
+    // All columns except for ID should be null
+    rows(0).toSeq.drop(1).foreach { v =>
+      assert(v === null)
+    }
   }
 
   test("SQL query as table name") {
